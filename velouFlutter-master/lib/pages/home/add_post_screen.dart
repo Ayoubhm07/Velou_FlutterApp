@@ -1,9 +1,12 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter_dashboard/pages/home/posts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'icon_list_screen.dart';
-import 'package:dio/dio.dart';
+import 'package:flutter_dashboard/model/post_model.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 class AddPostScreen extends StatefulWidget {
   final GlobalKey<ScaffoldState> scaffoldKey;
@@ -18,25 +21,86 @@ class _AddPostScreenState extends State<AddPostScreen> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
-  bool _imageVisible = false;
-  File? _selectedImage;
 
   // Privacy options
   List<String> _privacyOptions = ['Private', 'Friends Only', 'Public'];
   String _selectedPrivacy = 'Private';
 
-  // Image picker
-  final ImagePicker _imagePicker = ImagePicker();
+  var imageForSendToAPI;
+  var img;
+  var tempp;
+
+  Future<void> _imgFromGallery() async {
+    final temp = await ImagePicker().getImage(
+      source: ImageSource.camera,
+      imageQuality: 80,
+    );
+    print(temp);
+    imageForSendToAPI = await temp?.readAsBytes();
+    //print(imageForSendToAPI);
+    setState(() {
+      tempp = temp;
+      img = imageForSendToAPI;
+    });
+  }
 
   // Base URL for your API
-  final String baseUrl = 'your_api_base_url_here';
+  final String baseUrl = 'http://localhost:5004';
+
+  Future<void> _addPost(Post newPost) async {
+    if (_validateForm()) {
+      try {
+        final String url = 'http://localhost:5004/api/posts/add-post-and';
+
+        // Create a new http.MultipartRequest
+        var request = http.MultipartRequest('POST', Uri.parse(url));
+        request.fields['title'] = newPost.title;
+        request.fields['desc'] = newPost.description;
+        request.fields['state'] = newPost.state;
+        request.fields['date'] = newPost.datep;
+        request.fields['category'] = newPost.category;
+        request.fields['image'] = newPost.image;
+
+        // Add the image file
+
+        // Send the request
+        var response = await request.send();
+
+        if (response.statusCode == 201) {
+          // Decode the response data
+          final responseData =
+              json.decode(await response.stream.bytesToString());
+
+          print('Post added successfully: $newPost');
+
+          _showSuccessAlert();
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (context) => PostsPage(scaffoldKey: widget.scaffoldKey),
+            ),
+          );
+        } else {
+          _showErrorAlert('Failed to add post');
+        }
+      } catch (error) {
+        print(error);
+        _showErrorAlert('An error occurred while adding the post.');
+      }
+    } else {
+      _showValidationAlert();
+    }
+  }
 
   // Function to validate the form
   bool _validateForm() {
     if (_titleController.text.isEmpty ||
         _descriptionController.text.isEmpty ||
         _selectedPrivacy.isEmpty ||
-        _selectedImage == null) {
+        imageForSendToAPI == null) {
+      return false;
+    } else if (!_titleController.text[0]
+        .toUpperCase()
+        .contains(RegExp('[A-Z]'))) {
       return false;
     }
 
@@ -106,42 +170,6 @@ class _AddPostScreenState extends State<AddPostScreen> {
     );
   }
 
-  // Function to add a post
-  Future<void> _addPost() async {
-    if (_validateForm()) {
-      try {
-        // Prepare FormData for the HTTP request
-        FormData formData = FormData.fromMap({
-          'title': _titleController.text,
-          'description': _descriptionController.text,
-          'privacy': _selectedPrivacy,
-          'image': await MultipartFile.fromFile(_selectedImage!.path),
-        });
-
-        // Send HTTP request to your API endpoint
-        final response = await Dio().post(
-          'http://localhost:5004/api/posts/add-post',
-          data: formData,
-        );
-
-        if (response.statusCode == 201) {
-          // Successfully added post
-          _showSuccessAlert();
-        } else {
-          // Display an error message
-          _showErrorAlert('Failed to add post');
-        }
-      } catch (error) {
-        print(error);
-        // Handle other errors if needed
-        _showErrorAlert('An error occurred while adding the post.');
-      }
-    } else {
-      // Show validation alert
-      _showValidationAlert();
-    }
-  }
-
   // Fonction pour naviguer vers la page Dashboard
   void _navigateToDashboard() {
     Navigator.of(context).pushReplacementNamed('/dashboard');
@@ -150,14 +178,6 @@ class _AddPostScreenState extends State<AddPostScreen> {
   // Fonction pour naviguer vers la page PostPage
   void _navigateToPostPage() {
     Navigator.of(context).pushReplacementNamed('/post');
-  }
-
-  // Fonction pour afficher l'animation d'ajout de post
-  void _animateAddPost() {
-    // Ajoutez l'animation ici
-    // Vous pouvez utiliser un AnimatedSwitcher ou une autre méthode d'animation
-    // par exemple, vous pouvez utiliser le package "animated_floatingactionbutton"
-    // https://pub.dev/packages/animated_floatingactionbutton
   }
 
   @override
@@ -227,48 +247,32 @@ class _AddPostScreenState extends State<AddPostScreen> {
                       ElevatedButton(
                         onPressed: () async {
                           // Choose an image from gallery
-                          final pickedFile = await _imagePicker.pickImage(
-                            source: ImageSource.gallery,
-                          );
-
-                          if (pickedFile != null) {
-                            setState(() {
-                              _selectedImage = File(pickedFile.path);
-                              _imageVisible = true;
-                            });
-                          }
+                          await _imgFromGallery();
                         },
                         style: ElevatedButton.styleFrom(
                           primary: Colors.green,
                         ),
                         child: Text('Ajouter une Image'),
                       ),
-                      SizedBox(height: 16.0),
-                      if (_imageVisible)
-                        Container(
-                          height: 200.0,
-                          decoration: BoxDecoration(
-                            color: Colors.grey[200],
-                            borderRadius: BorderRadius.circular(8.0),
-                          ),
-                          child: _selectedImage != null
-                              ? Image.network(
-                                  // Use the image path or URL here
-                                  _selectedImage!.path,
-                                  fit: BoxFit.cover,
-                                )
-                              : null,
-                        ),
-
+                      SizedBox(height: 16),
+                      imageForSendToAPI != null
+                          ? Image.memory(imageForSendToAPI)
+                          : Container(),
                       SizedBox(height: 16.0),
                       ElevatedButton(
                         onPressed: () {
                           // Validation du formulaire avant la soumission
                           if (_validateForm()) {
-                            // Soumettre le formulaire (Implémenter la logique ici)
-                            _animateAddPost();
+                            Post newPost = Post(
+                                title: _titleController.text,
+                                description: _descriptionController.text,
+                                image: img.toString(),
+                                datep: DateTime.now().toIso8601String(),
+                                state: _selectedPrivacy,
+                                category: "");
+
+                            _addPost(newPost);
                           } else {
-                            // Afficher l'alerte de validation
                             _showValidationAlert();
                           }
                         },

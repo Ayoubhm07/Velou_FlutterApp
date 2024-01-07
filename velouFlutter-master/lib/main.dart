@@ -43,11 +43,8 @@ class MyApp extends StatelessWidget {
       ),
       initialRoute: '/dashboard',
       routes: {
-        '/postDetails': (context) =>
-            PostPage(scaffoldKey: GlobalKey<ScaffoldState>()),
-        '/reservation': (context) =>
-            PostPage(scaffoldKey: GlobalKey<ScaffoldState>()),
-        '/post': (context) => PostsPage(),
+        '/post': (context) =>
+            PostsPage(scaffoldKey: GlobalKey<ScaffoldState>()),
         // Add more routes as needed
       },
       home: HomePage(
